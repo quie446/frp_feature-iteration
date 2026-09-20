@@ -99,6 +99,8 @@ type V2ProxyBaseSpec struct {
 	Metadatas    map[string]string        `json:"metadatas,omitempty"`
 	Transport    *V2ProxyTransportSpec    `json:"transport,omitempty"`
 	LoadBalancer *V2ProxyLoadBalancerSpec `json:"loadBalancer,omitempty"`
+	// TTL is the configured lifetime of a temporary proxy, e.g. "2h".
+	TTL string `json:"ttl,omitempty"`
 }
 
 type V2ProxyTransportSpec struct {
@@ -163,6 +165,12 @@ type V2ProxyStatusResp struct {
 	CurConns        int64  `json:"curConns"`
 	LastStartAt     int64  `json:"lastStartAt,omitempty"`
 	LastCloseAt     int64  `json:"lastCloseAt,omitempty"`
+	// Expired is true once the temporary proxy passed its TTL.
+	Expired bool `json:"expired,omitempty"`
+	// ExpiresAt is the absolute expiry instant as a unix timestamp.
+	ExpiresAt int64 `json:"expiresAt,omitempty"`
+	// RemainingSeconds is the time left until expiry, -1 without a TTL.
+	RemainingSeconds int64 `json:"remainingSeconds"`
 }
 
 type V2ProxyTrafficResp struct {

@@ -234,6 +234,13 @@ func (ctl *Control) registerMsgHandlers() {
 	ctl.msgDispatcher.RegisterHandler(&msg.NewProxyResp{}, ctl.handleNewProxyResp)
 	ctl.msgDispatcher.RegisterHandler(&msg.NatHoleResp{}, ctl.handleNatHoleResp)
 	ctl.msgDispatcher.RegisterHandler(&msg.Pong{}, ctl.handlePong)
+	ctl.msgDispatcher.RegisterHandler(&msg.CloseProxy{}, ctl.handleCloseProxy)
+}
+
+func (ctl *Control) handleCloseProxy(m msg.Message) {
+	inMsg := m.(*msg.CloseProxy)
+	ctl.xl.Warnf("server requested to close proxy [%s], e.g. temporary tunnel ttl expired", inMsg.ProxyName)
+	ctl.pm.CloseByServer(inMsg.ProxyName)
 }
 
 // heartbeatWorker sends heartbeat to server and check heartbeat timeout.

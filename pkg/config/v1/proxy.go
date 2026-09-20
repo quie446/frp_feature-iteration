@@ -15,15 +15,69 @@
 package v1
 
 import (
+	"encoding/json"
 	"maps"
 	"reflect"
 	"slices"
+	"time"
 
 	"github.com/fatedier/frp/pkg/config/types"
 	"github.com/fatedier/frp/pkg/msg"
 	"github.com/fatedier/frp/pkg/util/jsonx"
 	"github.com/fatedier/frp/pkg/util/util"
 )
+
+// TTL is an optional lifetime for a temporary proxy, for example "2h" or
+// "90m". A zero value means no TTL is configured and the proxy keeps the
+// legacy behavior. A non-positive or unparseable value is rejected at load
+// time on the client side and at registration time on the server side.
+type TTL time.Duration
+
+func (d TTL) Duration() time.Duration {
+	return time.Duration(d)
+}
+
+func (d TTL) Seconds() int64 {
+	return int64(time.Duration(d) / time.Second)
+}
+
+func (d TTL) MarshalJSON() ([]byte, error) {
+	return jsonx.Marshal(time.Duration(d).String())
+}
+
+func (d *TTL) UnmarshalJSON(b []byte) error {
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	if s == "" {
+		*d = 0
+		return nil
+	}
+	parsed, err := time.ParseDuration(s)
+	if err != nil {
+		return err
+	}
+	*d = TTL(parsed)
+	return nil
+}
+
+func (d TTL) MarshalText() ([]byte, error) {
+	return []byte(time.Duration(d).String()), nil
+}
+
+func (d *TTL) UnmarshalText(text []byte) error {
+	if len(text) == 0 {
+		*d = 0
+		return nil
+	}
+	parsed, err := time.ParseDuration(string(text))
+	if err != nil {
+		return err
+	}
+	*d = TTL(parsed)
+	return nil
+}
 
 type ProxyTransport struct {
 	// UseEncryption controls whether or not communication with the server will
@@ -129,6 +183,12 @@ type ProxyBaseConfig struct {
 	LoadBalancer LoadBalancerConfig `json:"loadBalancer,omitempty"`
 	HealthCheck  HealthCheckConfig  `json:"healthCheck,omitempty"`
 	ProxyBackend
+	// TTL is an optional lifetime for this temporary proxy, for example
+	// "2h". Once the proxy has been online for that long, the server tears
+	// it down and rejects re-registration under the same name until the
+	// expiry is cleared. A nil TTL means legacy behavior; an explicitly
+	// configured zero or negative value is rejected at load time.
+	TTL *TTL `json:"ttl,omitempty" yaml:"ttl,omitempty" toml:"ttl,omitempty"`
 }
 
 func (c ProxyBaseConfig) Clone() ProxyBaseConfig {
@@ -174,6 +234,9 @@ func (c *ProxyBaseConfig) MarshalToMsg(m *msg.NewProxy) {
 	m.GroupKey = c.LoadBalancer.GroupKey
 	m.Metas = c.Metadatas
 	m.Annotations = c.Annotations
+	if c.TTL != nil {
+		m.TTLSeconds = c.TTL.Seconds()
+	}
 }
 
 func (c *ProxyBaseConfig) UnmarshalFromMsg(m *msg.NewProxy) {
@@ -191,6 +254,10 @@ func (c *ProxyBaseConfig) UnmarshalFromMsg(m *msg.NewProxy) {
 	c.LoadBalancer.GroupKey = m.GroupKey
 	c.Metadatas = m.Metas
 	c.Annotations = m.Annotations
+	if m.TTLSeconds > 0 {
+		t := TTL(time.Duration(m.TTLSeconds) * time.Second)
+		c.TTL = &t
+	}
 }
 
 type TypedProxyConfig struct {

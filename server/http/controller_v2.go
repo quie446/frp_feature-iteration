@@ -544,21 +544,42 @@ func (c *Controller) buildV2ProxyResp(ps *mem.ProxyStats) model.V2ProxyResp {
 			cfg = pxy.GetConfigurer()
 		}
 	}
+	status := model.V2ProxyStatusResp{
+		State:           state,
+		TodayTrafficIn:  ps.TodayTrafficIn,
+		TodayTrafficOut: ps.TodayTrafficOut,
+		CurConns:        ps.CurConns,
+		LastStartAt:     ps.LastStartAt,
+		LastCloseAt:     ps.LastCloseAt,
+	}
+	c.fillV2TTLStatus(ps.Name, &status)
 
 	return model.V2ProxyResp{
 		Name:     ps.Name,
 		User:     ps.User,
 		ClientID: ps.ClientID,
 		Spec:     buildV2ProxySpec(ps.Type, cfg),
-		Status: model.V2ProxyStatusResp{
-			State:           state,
-			TodayTrafficIn:  ps.TodayTrafficIn,
-			TodayTrafficOut: ps.TodayTrafficOut,
-			CurConns:        ps.CurConns,
-			LastStartAt:     ps.LastStartAt,
-			LastCloseAt:     ps.LastCloseAt,
-		},
+		Status:   status,
 	}
+}
+
+func (c *Controller) fillV2TTLStatus(name string, status *model.V2ProxyStatusResp) {
+	status.RemainingSeconds = -1
+	if c.ttlRegistry == nil {
+		return
+	}
+	info, ok := c.ttlRegistry.Get(name)
+	if !ok {
+		return
+	}
+	status.ExpiresAt = info.ExpiresAt.Unix()
+	if info.Expired {
+		status.State = "expired"
+		status.Expired = true
+		status.RemainingSeconds = 0
+		return
+	}
+	status.RemainingSeconds = int64(info.Remaining.Seconds())
 }
 
 func buildV2ProxySpec(proxyType string, cfg v1.ProxyConfigurer) model.V2ProxySpec {
@@ -631,7 +652,7 @@ func buildV2ProxySpec(proxyType string, cfg v1.ProxyConfigurer) model.V2ProxySpe
 }
 
 func buildV2ProxyBaseSpec(base *v1.ProxyBaseConfig) model.V2ProxyBaseSpec {
-	return model.V2ProxyBaseSpec{
+	spec := model.V2ProxyBaseSpec{
 		Annotations: maps.Clone(base.Annotations),
 		Metadatas:   maps.Clone(base.Metadatas),
 		Transport: &model.V2ProxyTransportSpec{
@@ -644,4 +665,8 @@ func buildV2ProxyBaseSpec(base *v1.ProxyBaseConfig) model.V2ProxyBaseSpec {
 			Group: base.LoadBalancer.Group,
 		},
 	}
+	if base.TTL != nil {
+		spec.TTL = base.TTL.Duration().String()
+	}
+	return spec
 }

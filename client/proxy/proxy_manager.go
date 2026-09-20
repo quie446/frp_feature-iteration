@@ -95,6 +95,19 @@ func (pm *Manager) Close() {
 	pm.proxies = make(map[string]*Wrapper)
 }
 
+// CloseByServer permanently stops a proxy that the server asked us to
+// close (for example a temporary tunnel whose ttl expired). The wrapper
+// stays in place and does not retry registration until the proxy is
+// reconfigured.
+func (pm *Manager) CloseByServer(name string) {
+	pm.mu.RLock()
+	pw, ok := pm.proxies[name]
+	pm.mu.RUnlock()
+	if ok {
+		pw.CloseByServer()
+	}
+}
+
 func (pm *Manager) HandleWorkConn(name string, workConn net.Conn, m *msg.StartWorkConn) {
 	pm.mu.RLock()
 	pw, ok := pm.proxies[name]

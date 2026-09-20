@@ -225,6 +225,12 @@ func (f *Framework) PortByName(name string) int {
 	return f.usedPorts[name]
 }
 
+// ClientConfigPath returns the rendered config path for the i-th client
+// started via RunProcesses.
+func (f *Framework) ClientConfigPath(i int) string {
+	return f.clientConfPaths[i]
+}
+
 func (f *Framework) AllocPort() int {
 	port := f.portAllocator.Get()
 	ExpectTrue(port > 0, "alloc port failed")

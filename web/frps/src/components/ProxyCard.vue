@@ -24,6 +24,17 @@
               proxy.user ? `${proxy.user}.${proxy.clientID}` : proxy.clientID
             }}</span>
           </span>
+          <span v-if="proxy.ttl" class="meta-item">
+            <span class="meta-label">TTL:</span>
+            <span class="meta-value">{{ proxy.ttl }}</span>
+          </span>
+          <span
+            v-if="proxy.ttl && !proxy.expired && proxy.remainingSeconds >= 0"
+            class="meta-item"
+          >
+            <span class="meta-label">Remaining:</span>
+            <span class="meta-value">{{ formatTTL(proxy.remainingSeconds) }}</span>
+          </span>
         </div>
       </div>
 
@@ -43,8 +54,11 @@
           </div>
         </div>
 
-        <div class="status-badge" :class="proxy.status">
-          {{ proxy.status }}
+        <div
+          class="status-badge"
+          :class="proxy.expired ? 'expired' : proxy.status"
+        >
+          {{ proxy.expired ? 'expired' : proxy.status }}
         </div>
       </div>
     </div>
@@ -65,6 +79,16 @@ interface Props {
 
 const props = defineProps<Props>()
 const route = useRoute()
+
+const formatTTL = (seconds: number): string => {
+  if (seconds <= 0) return '0s'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  if (h > 0) return `${h}h${m}m`
+  if (m > 0) return `${m}m${s}s`
+  return `${s}s`
+}
 
 const proxyLink = computed(() => {
   const base = `/proxy/${props.proxy.name}`
@@ -218,6 +242,11 @@ const proxyLink = computed(() => {
 .status-badge.offline {
   background: var(--el-color-danger-light-9);
   color: var(--el-color-danger);
+}
+
+.status-badge.expired {
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
 }
 
 /* Mobile Responsive */

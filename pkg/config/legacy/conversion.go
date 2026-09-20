@@ -190,6 +190,10 @@ func Convert_ProxyConf_To_v1_Base(conf ProxyConf) *v1.ProxyBaseConfig {
 	out.Name = base.ProxyName
 	out.Type = base.ProxyType
 	out.Metadatas = base.Metas
+	if base.ttlDuration > 0 {
+		t := v1.TTL(base.ttlDuration)
+		out.TTL = &t
+	}
 
 	out.Transport.UseEncryption = base.UseEncryption
 	out.Transport.UseCompression = base.UseCompression

@@ -17,6 +17,7 @@ package legacy
 import (
 	"fmt"
 	"reflect"
+	"time"
 
 	"gopkg.in/ini.v1"
 
@@ -184,6 +185,11 @@ type BaseProxyConf struct {
 
 	LocalSvrConf    `ini:",extends"`
 	HealthCheckConf `ini:",extends"`
+
+	// TTL specifies the optional lifetime of this temporary proxy, for
+	// example "2h". Empty means no TTL.
+	TTL         string        `ini:"ttl" json:"ttl"`
+	ttlDuration time.Duration `ini:"-" json:"-"`
 }
 
 // Base
@@ -196,6 +202,15 @@ func (cfg *BaseProxyConf) decorate(_ string, name string, section *ini.Section) 
 	cfg.ProxyName = name
 	// metas_xxx
 	cfg.Metas = GetMapWithoutPrefix(section.KeysHash(), "meta_")
+
+	// ttl
+	if key, err := section.GetKey("ttl"); err == nil && key.String() != "" {
+		d, err := time.ParseDuration(key.String())
+		if err != nil {
+			return fmt.Errorf("invalid ttl %q: %v", key.String(), err)
+		}
+		cfg.ttlDuration = d
+	}
 
 	// bandwidth_limit
 	if bandwidth, err := section.GetKey("bandwidth_limit"); err == nil {

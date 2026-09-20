@@ -10,6 +10,10 @@ export interface ProxyStatsInfo {
   lastStartTime: string
   lastCloseTime: string
   status: string
+  ttl?: string
+  expired?: boolean
+  expiresAt?: number
+  remainingSeconds?: number
 }
 
 export interface GetProxyResponse {
@@ -46,6 +50,7 @@ export interface ProxyV2BaseSpec {
   loadBalancer?: {
     group: string
   }
+  ttl?: string
 }
 
 export interface ProxyV2TCPBlock extends ProxyV2BaseSpec {
@@ -107,12 +112,15 @@ export type ProxyV2Spec = {
 }[ProxyV2Type]
 
 export interface ProxyV2Status {
-  phase: 'online' | 'offline'
+  phase: 'online' | 'offline' | 'expired'
   todayTrafficIn: number
   todayTrafficOut: number
   curConns: number
   lastStartAt?: number
   lastCloseAt?: number
+  expired?: boolean
+  expiresAt?: number
+  remainingSeconds?: number
 }
 
 export interface TrafficResponse {

@@ -16,6 +16,7 @@ package validation
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -73,4 +74,33 @@ func TestValidateDomainConfigForServerRejectsSubdomainHostCaseInsensitively(t *t
 			require.NoError(t, err)
 		})
 	}
+}
+
+func TestValidateProxyTTL(t *testing.T) {
+	ttlPtr := func(d time.Duration) *v1.TTL {
+		t := v1.TTL(d)
+		return &t
+	}
+	newCfg := func(ttl *v1.TTL) *v1.TCPProxyConfig {
+		return &v1.TCPProxyConfig{
+			ProxyBaseConfig: v1.ProxyBaseConfig{
+				Name: "temp",
+				Type: "tcp",
+				TTL:  ttl,
+				Transport: v1.ProxyTransport{
+					BandwidthLimitMode: "client",
+				},
+				ProxyBackend: v1.ProxyBackend{
+					LocalPort: 80,
+				},
+			},
+			RemotePort: 6000,
+		}
+	}
+
+	require.NoError(t, ValidateProxyConfigurerForClient(newCfg(nil)))
+	require.NoError(t, ValidateProxyConfigurerForClient(newCfg(ttlPtr(2*time.Hour))))
+	require.ErrorContains(t, ValidateProxyConfigurerForClient(newCfg(ttlPtr(500*time.Millisecond))), "ttl")
+	require.ErrorContains(t, ValidateProxyConfigurerForClient(newCfg(ttlPtr(0))), "ttl")
+	require.ErrorContains(t, ValidateProxyConfigurerForServer(newCfg(ttlPtr(-time.Hour)), &v1.ServerConfig{}), "ttl")
 }

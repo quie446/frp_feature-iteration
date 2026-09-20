@@ -40,6 +40,7 @@ import (
 	"github.com/fatedier/frp/server/metrics"
 	"github.com/fatedier/frp/server/proxy"
 	"github.com/fatedier/frp/server/registry"
+	"github.com/fatedier/frp/server/ttl"
 )
 
 type ControlID uint64
@@ -283,6 +284,25 @@ func (cm *ControlManager) GetByID(runID string) (ctl *Control, ok bool) {
 	return ctl, true
 }
 
+// CloseProxyByName closes a proxy with the given name wherever it is
+// currently registered. It is used by the TTL registry to tear down expired
+// temporary tunnels. It returns true when a control owned the proxy.
+func (cm *ControlManager) CloseProxyByName(name string, notifyClient bool) bool {
+	cm.mu.RLock()
+	ctls := make([]*Control, 0, len(cm.ctlsByRunID))
+	for _, entry := range cm.ctlsByRunID {
+		ctls = append(ctls, entry.ctl)
+	}
+	cm.mu.RUnlock()
+
+	for _, ctl := range ctls {
+		if ctl.closeProxyIfOwned(name, notifyClient) {
+			return true
+		}
+	}
+	return false
+}
+
 // admitVisitorByRunID commits a visitor admission against the current running
 // control while its run and lifecycle ownership are held. The callback must
 // only perform the in-memory, buffered visitor admission.
@@ -358,6 +378,8 @@ type SessionContext struct {
 	RC *controller.ResourceController
 	// proxy manager
 	PxyManager *proxy.Manager
+	// TTL ledger for temporary proxies
+	TTLRegistry *ttl.Registry
 	// plugin manager
 	PluginManager *plugin.Manager
 	// verifies authentication based on selected method
@@ -664,10 +686,18 @@ func (ctl *Control) loginUserInfo() plugin.UserInfo {
 	}
 }
 
-func (ctl *Control) closeProxy(pxy proxy.Proxy) {
+func (ctl *Control) closeProxy(pxy proxy.Proxy, notifyClient bool) {
 	pxy.Close()
 	ctl.sessionCtx.PxyManager.Del(pxy.GetName())
 	ctl.serverMetrics.CloseProxy(pxy.GetName(), pxy.GetConfigurer().GetBaseConfig().Type)
+
+	if notifyClient {
+		// Ask frpc to tear the proxy down on its side as well, so it does
+		// not silently keep retrying the expired tunnel.
+		_ = ctl.msgDispatcher.Send(&msg.CloseProxy{
+			ProxyName: pxy.GetName(),
+		})
+	}
 
 	notifyContent := &plugin.CloseProxyContent{
 		User: ctl.loginUserInfo(),
@@ -678,6 +708,25 @@ func (ctl *Control) closeProxy(pxy proxy.Proxy) {
 	go func() {
 		_ = ctl.sessionCtx.PluginManager.CloseProxy(notifyContent)
 	}()
+}
+
+// closeProxyIfOwned removes and closes the named proxy when this control
+// currently owns it. Returns true when the proxy belonged to this control.
+func (ctl *Control) closeProxyIfOwned(name string, notifyClient bool) bool {
+	ctl.mu.Lock()
+	pxy, ok := ctl.proxies[name]
+	if !ok {
+		ctl.mu.Unlock()
+		return false
+	}
+	if ctl.sessionCtx.ServerCfg.MaxPortsPerClient > 0 {
+		ctl.portsUsedNum -= pxy.GetUsedPortsNum()
+	}
+	delete(ctl.proxies, name)
+	ctl.mu.Unlock()
+
+	ctl.closeProxy(pxy, notifyClient)
+	return true
 }
 
 func (ctl *Control) worker() {
@@ -711,7 +760,7 @@ func (ctl *Control) worker() {
 	ctl.mu.Unlock()
 
 	for _, pxy := range proxies {
-		ctl.closeProxy(pxy)
+		ctl.closeProxy(pxy, false)
 	}
 
 	ctl.serverMetrics.CloseClient()
@@ -823,6 +872,19 @@ func (ctl *Control) RegisterProxy(pxyMsg *msg.NewProxy) (remoteAddr string, err 
 		return
 	}
 
+	// Temporary proxies: enforce the server-side TTL ledger. An expired
+	// name stays rejected even if the client reconnects, and reconnecting
+	// before expiry never extends the original deadline.
+	var proxyTTL time.Duration
+	if ttlCfg := pxyConf.GetBaseConfig().TTL; ttlCfg != nil {
+		proxyTTL = ttlCfg.Duration()
+	}
+	if proxyTTL > 0 && ctl.sessionCtx.TTLRegistry != nil {
+		if err = ctl.sessionCtx.TTLRegistry.Admit(pxyMsg.ProxyName, proxyTTL); err != nil {
+			return
+		}
+	}
+
 	// User info
 	userInfo := plugin.UserInfo{
 		User:  ctl.sessionCtx.LoginMsg.User,
@@ -870,22 +932,52 @@ func (ctl *Control) RegisterProxy(pxyMsg *msg.NewProxy) (remoteAddr string, err 
 
 	if ctl.sessionCtx.PxyManager.Exist(pxyMsg.ProxyName) {
 		err = fmt.Errorf("proxy [%s] already exists", pxyMsg.ProxyName)
+		if proxyTTL > 0 && ctl.sessionCtx.TTLRegistry != nil {
+			ctl.sessionCtx.TTLRegistry.Cancel(pxyMsg.ProxyName)
+		}
 		return
 	}
 
 	remoteAddr, err = pxy.Run()
 	if err != nil {
+		if proxyTTL > 0 && ctl.sessionCtx.TTLRegistry != nil {
+			ctl.sessionCtx.TTLRegistry.Cancel(pxyMsg.ProxyName)
+		}
 		return
 	}
 	defer func() {
 		if err != nil {
 			pxy.Close()
+			if proxyTTL > 0 && ctl.sessionCtx.TTLRegistry != nil {
+				ctl.sessionCtx.TTLRegistry.Cancel(pxyMsg.ProxyName)
+			}
 		}
 	}()
 
 	err = ctl.sessionCtx.PxyManager.Add(pxyMsg.ProxyName, pxy)
 	if err != nil {
+		if proxyTTL > 0 && ctl.sessionCtx.TTLRegistry != nil {
+			ctl.sessionCtx.TTLRegistry.Cancel(pxyMsg.ProxyName)
+		}
 		return
+	}
+
+	if proxyTTL > 0 && ctl.sessionCtx.TTLRegistry != nil {
+		info, ok := ctl.sessionCtx.TTLRegistry.Get(pxyMsg.ProxyName)
+		if !ok || info.Expired || !ctl.sessionCtx.TTLRegistry.Confirm(pxyMsg.ProxyName) {
+			// The TTL expired while registration was in flight. Roll back;
+			// the record stays expired so the name remains blocked.
+			pxy.Close()
+			ctl.sessionCtx.PxyManager.Del(pxyMsg.ProxyName)
+			if ctl.sessionCtx.ServerCfg.MaxPortsPerClient > 0 {
+				ctl.mu.Lock()
+				ctl.portsUsedNum -= pxy.GetUsedPortsNum()
+				ctl.mu.Unlock()
+			}
+			expiredAt := info.ExpiresAt
+			err = &ttl.ExpiredError{Name: pxyMsg.ProxyName, Expired: expiredAt}
+			return
+		}
 	}
 
 	ctl.mu.Lock()
@@ -895,19 +987,6 @@ func (ctl *Control) RegisterProxy(pxyMsg *msg.NewProxy) (remoteAddr string, err 
 }
 
 func (ctl *Control) CloseProxy(closeMsg *msg.CloseProxy) (err error) {
-	ctl.mu.Lock()
-	pxy, ok := ctl.proxies[closeMsg.ProxyName]
-	if !ok {
-		ctl.mu.Unlock()
-		return
-	}
-
-	if ctl.sessionCtx.ServerCfg.MaxPortsPerClient > 0 {
-		ctl.portsUsedNum -= pxy.GetUsedPortsNum()
-	}
-	delete(ctl.proxies, closeMsg.ProxyName)
-	ctl.mu.Unlock()
-
-	ctl.closeProxy(pxy)
+	ctl.closeProxyIfOwned(closeMsg.ProxyName, false)
 	return
 }

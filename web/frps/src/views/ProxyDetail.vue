@@ -43,8 +43,11 @@
               <div class="header-title-row">
                 <h1 class="proxy-name">{{ proxy.name }}</h1>
                 <span class="type-tag">{{ proxy.type.toUpperCase() }}</span>
-                <span class="status-badge" :class="proxy.status">
-                  {{ proxy.status }}
+                <span
+                  class="status-badge"
+                  :class="proxy.expired ? 'expired' : proxy.status"
+                >
+                  {{ proxy.expired ? 'expired' : proxy.status }}
                 </span>
               </div>
               <div class="header-meta">
@@ -67,6 +70,14 @@
                 <span v-if="proxy.lastCloseTime" class="meta-text">
                   <span class="meta-sep">·</span>
                   Last Closed {{ proxy.lastCloseTime }}
+                </span>
+                <span v-if="proxy.ttl" class="meta-text">
+                  <span class="meta-sep">·</span>
+                  TTL {{ proxy.ttl }}<template
+                    v-if="!proxy.expired && proxy.remainingSeconds >= 0"
+                  >
+                    · {{ formatTTL(proxy.remainingSeconds) }} left</template
+                  >
                 </span>
               </div>
             </div>
@@ -274,6 +285,16 @@ const goBack = () => {
   } else {
     router.push('/proxies')
   }
+}
+
+const formatTTL = (seconds: number): string => {
+  if (seconds <= 0) return '0s'
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = seconds % 60
+  if (h > 0) return `${h}h${m}m`
+  if (m > 0) return `${m}m${s}s`
+  return `${s}s`
 }
 
 let serverInfo: ServerInfo | null = null
@@ -524,6 +545,11 @@ onMounted(() => {
 .status-badge.offline {
   background: var(--hover-bg);
   color: var(--text-secondary);
+}
+
+.status-badge.expired {
+  background: var(--el-color-warning-light-9);
+  color: var(--el-color-warning);
 }
 
 html.dark .status-badge.online {

@@ -14,6 +14,9 @@ class BaseProxy {
   clientID: string
   addr: string
   port: number
+  ttl: string
+  expired: boolean
+  remainingSeconds: number
 
   customDomains: string
   hostHeaderRewrite: string
@@ -51,6 +54,9 @@ class BaseProxy {
 
     this.addr = ''
     this.port = 0
+    this.ttl = proxyStats.ttl || ''
+    this.expired = proxyStats.expired || false
+    this.remainingSeconds = proxyStats.remainingSeconds ?? -1
     this.customDomains = ''
     this.hostHeaderRewrite = ''
     this.locations = ''

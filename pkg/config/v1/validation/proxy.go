@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/util/validation"
 
@@ -46,6 +47,10 @@ func validateProxyBaseConfigForClient(c *v1.ProxyBaseConfig) error {
 		}
 	}
 
+	if c.TTL != nil && c.TTL.Duration() < time.Second {
+		return fmt.Errorf("ttl should be a positive duration of at least 1 second (e.g. \"2h\"), got %s", c.TTL.Duration())
+	}
+
 	if !slices.Contains([]string{"", "tcp", "http"}, c.HealthCheck.Type) {
 		return fmt.Errorf("not support health check type: %s", c.HealthCheck.Type)
 	}
@@ -67,6 +72,9 @@ func validateProxyBaseConfigForClient(c *v1.ProxyBaseConfig) error {
 func validateProxyBaseConfigForServer(c *v1.ProxyBaseConfig) error {
 	if err := ValidateAnnotations(c.Annotations); err != nil {
 		return err
+	}
+	if c.TTL != nil && c.TTL.Duration() < time.Second {
+		return fmt.Errorf("ttl should be a positive duration of at least 1 second, got %s", c.TTL.Duration())
 	}
 	return nil
 }

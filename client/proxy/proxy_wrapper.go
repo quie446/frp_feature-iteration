@@ -36,12 +36,13 @@ import (
 )
 
 const (
-	ProxyPhaseNew         = "new"
-	ProxyPhaseWaitStart   = "wait start"
-	ProxyPhaseStartErr    = "start error"
-	ProxyPhaseRunning     = "running"
-	ProxyPhaseCheckFailed = "check failed"
-	ProxyPhaseClosed      = "closed"
+	ProxyPhaseNew          = "new"
+	ProxyPhaseWaitStart    = "wait start"
+	ProxyPhaseStartErr     = "start error"
+	ProxyPhaseRunning      = "running"
+	ProxyPhaseCheckFailed  = "check failed"
+	ProxyPhaseClosed       = "closed"
+	ProxyPhaseServerClosed = "closed by server"
 )
 
 var (
@@ -182,6 +183,23 @@ func (pw *Wrapper) Stop() {
 	}
 	pw.Phase = ProxyPhaseClosed
 	pw.close()
+}
+
+// CloseByServer stops the proxy after the server explicitly requested it
+// (e.g. ttl expiry). The check worker exits and never retries the proxy.
+func (pw *Wrapper) CloseByServer() {
+	pw.mu.Lock()
+	defer pw.mu.Unlock()
+	if pw.Phase == ProxyPhaseServerClosed {
+		return
+	}
+	close(pw.closeCh)
+	close(pw.healthNotifyCh)
+	pw.pxy.Close()
+	if pw.monitor != nil {
+		pw.monitor.Stop()
+	}
+	pw.Phase = ProxyPhaseServerClosed
 }
 
 func (pw *Wrapper) close() {

@@ -56,6 +56,7 @@ import (
 	"github.com/fatedier/frp/server/ports"
 	"github.com/fatedier/frp/server/proxy"
 	"github.com/fatedier/frp/server/registry"
+	"github.com/fatedier/frp/server/ttl"
 	"github.com/fatedier/frp/server/visitor"
 )
 
@@ -108,6 +109,9 @@ type Service struct {
 
 	// Manage all proxies
 	pxyManager *proxy.Manager
+
+	// TTL ledger for temporary proxies
+	ttlRegistry *ttl.Registry
 
 	// Manage all plugins
 	pluginManager *plugin.Manager
@@ -183,6 +187,9 @@ func NewService(cfg *v1.ServerConfig) (*Service, error) {
 		cfg:               cfg,
 		ctx:               context.Background(),
 	}
+	svr.ttlRegistry = ttl.NewRegistry(func(name string) {
+		svr.ctlManager.CloseProxyByName(name, true)
+	})
 	if webServer != nil {
 		webServer.RouteRegister(svr.registerRouteHandlers)
 	}
@@ -434,6 +441,7 @@ func (svr *Service) Close() error {
 	svr.rc.Close()
 	svr.muxer.Close()
 	svr.ctlManager.Close()
+	svr.ttlRegistry.Close()
 	if svr.cancel != nil {
 		svr.cancel()
 	}
@@ -815,6 +823,7 @@ func (svr *Service) RegisterControl(
 	ctl, err := NewControl(ctx, &SessionContext{
 		RC:             svr.rc,
 		PxyManager:     svr.pxyManager,
+		TTLRegistry:    svr.ttlRegistry,
 		PluginManager:  svr.pluginManager,
 		AuthVerifier:   authVerifier,
 		EncryptionKey:  svr.auth.EncryptionKey(),

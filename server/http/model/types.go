@@ -108,6 +108,16 @@ type ProxyStatsInfo struct {
 	LastStartTime   string `json:"lastStartTime"`
 	LastCloseTime   string `json:"lastCloseTime"`
 	Status          string `json:"status"`
+	// TTL is the configured lifetime of a temporary proxy, e.g. "2h".
+	TTL string `json:"ttl,omitempty"`
+	// Expired is true when the proxy name has passed its TTL and new
+	// registrations under this name are rejected.
+	Expired bool `json:"expired,omitempty"`
+	// ExpiresAt is the absolute expiry instant as a unix timestamp.
+	ExpiresAt int64 `json:"expiresAt,omitempty"`
+	// RemainingSeconds is the time left until expiry. It is -1 for proxies
+	// without a TTL.
+	RemainingSeconds int64 `json:"remainingSeconds"`
 }
 
 type GetProxyInfoResp struct {
@@ -116,16 +126,20 @@ type GetProxyInfoResp struct {
 
 // Get proxy info by name.
 type GetProxyStatsResp struct {
-	Name            string `json:"name"`
-	Conf            any    `json:"conf"`
-	User            string `json:"user,omitempty"`
-	ClientID        string `json:"clientID,omitempty"`
-	TodayTrafficIn  int64  `json:"todayTrafficIn"`
-	TodayTrafficOut int64  `json:"todayTrafficOut"`
-	CurConns        int64  `json:"curConns"`
-	LastStartTime   string `json:"lastStartTime"`
-	LastCloseTime   string `json:"lastCloseTime"`
-	Status          string `json:"status"`
+	Name             string `json:"name"`
+	Conf             any    `json:"conf"`
+	User             string `json:"user,omitempty"`
+	ClientID         string `json:"clientID,omitempty"`
+	TodayTrafficIn   int64  `json:"todayTrafficIn"`
+	TodayTrafficOut  int64  `json:"todayTrafficOut"`
+	CurConns         int64  `json:"curConns"`
+	LastStartTime    string `json:"lastStartTime"`
+	LastCloseTime    string `json:"lastCloseTime"`
+	Status           string `json:"status"`
+	TTL              string `json:"ttl,omitempty"`
+	Expired          bool   `json:"expired,omitempty"`
+	ExpiresAt        int64  `json:"expiresAt,omitempty"`
+	RemainingSeconds int64  `json:"remainingSeconds"`
 }
 
 // /api/traffic/:name

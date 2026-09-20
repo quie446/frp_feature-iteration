@@ -31,6 +31,7 @@ import (
 	"github.com/fatedier/frp/server/http/model"
 	"github.com/fatedier/frp/server/proxy"
 	"github.com/fatedier/frp/server/registry"
+	"github.com/fatedier/frp/server/ttl"
 )
 
 type Controller struct {
@@ -38,6 +39,7 @@ type Controller struct {
 	serverCfg      *v1.ServerConfig
 	clientRegistry *registry.ClientRegistry
 	pxyManager     ProxyManager
+	ttlRegistry    *ttl.Registry
 }
 
 type ProxyManager interface {
@@ -48,11 +50,13 @@ func NewController(
 	serverCfg *v1.ServerConfig,
 	clientRegistry *registry.ClientRegistry,
 	pxyManager ProxyManager,
+	ttlRegistry *ttl.Registry,
 ) *Controller {
 	return &Controller{
 		serverCfg:      serverCfg,
 		clientRegistry: clientRegistry,
 		pxyManager:     pxyManager,
+		ttlRegistry:    ttlRegistry,
 	}
 }
 
@@ -216,8 +220,28 @@ func (c *Controller) APIProxyByName(ctx *httppkg.Context) (any, error) {
 	} else {
 		proxyInfo.Status = "offline"
 	}
+	c.fillTTL(name, &proxyInfo.Expired, &proxyInfo.TTL, &proxyInfo.ExpiresAt, &proxyInfo.RemainingSeconds)
 
 	return proxyInfo, nil
+}
+
+func (c *Controller) fillTTL(name string, expired *bool, ttlStr *string, expiresAt *int64, remaining *int64) {
+	*remaining = -1
+	if c.ttlRegistry == nil {
+		return
+	}
+	info, ok := c.ttlRegistry.Get(name)
+	if !ok {
+		return
+	}
+	*ttlStr = info.RequestedTTL.String()
+	*expiresAt = info.ExpiresAt.Unix()
+	if info.Expired {
+		*expired = true
+		*remaining = 0
+		return
+	}
+	*remaining = int64(info.Remaining.Seconds())
 }
 
 // DELETE /api/proxies?status=offline
@@ -245,6 +269,8 @@ func (c *Controller) getProxyStatsByType(proxyType string) (proxyInfos []*model.
 		} else {
 			proxyInfo.Status = "offline"
 		}
+		c.fillTTL(ps.Name, &proxyInfo.Expired, &proxyInfo.TTL,
+			&proxyInfo.ExpiresAt, &proxyInfo.RemainingSeconds)
 		proxyInfo.Name = ps.Name
 		proxyInfo.TodayTrafficIn = ps.TodayTrafficIn
 		proxyInfo.TodayTrafficOut = ps.TodayTrafficOut
@@ -271,6 +297,8 @@ func (c *Controller) getProxyStatsByTypeAndName(proxyType string, proxyName stri
 		} else {
 			proxyInfo.Status = "offline"
 		}
+		c.fillTTL(proxyName, &proxyInfo.Expired, &proxyInfo.TTL,
+			&proxyInfo.ExpiresAt, &proxyInfo.RemainingSeconds)
 		proxyInfo.TodayTrafficIn = ps.TodayTrafficIn
 		proxyInfo.TodayTrafficOut = ps.TodayTrafficOut
 		proxyInfo.CurConns = ps.CurConns

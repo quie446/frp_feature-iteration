@@ -87,6 +87,10 @@ export const toLegacyProxyStats = (proxy: ProxyV2Info): ProxyStatsInfo => {
     lastStartTime: formatUnixSeconds(proxy.status.lastStartAt),
     lastCloseTime: formatUnixSeconds(proxy.status.lastCloseAt),
     status: proxy.status.phase,
+    ttl: activeSpec?.ttl,
+    expired: proxy.status.expired,
+    expiresAt: proxy.status.expiresAt,
+    remainingSeconds: proxy.status.remainingSeconds,
   }
 }
 

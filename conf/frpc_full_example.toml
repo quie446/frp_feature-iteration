@@ -226,6 +226,11 @@ localIP = "192.168.31.100"
 localPort = 22
 # If remotePort is 0, frps will assign a random port for you
 remotePort = 0
+# Optional lifetime of a temporary tunnel, e.g. "30m", "2h".
+# When the TTL expires, frps tears this proxy down and rejects any
+# re-registration under the same proxy name until frps restarts or the
+# grant is cleared. Omit it for a normal, long-lived proxy.
+# ttl = "2h"
 
 [[proxies]]
 name = "dns"

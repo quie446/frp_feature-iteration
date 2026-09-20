@@ -19,6 +19,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/fatedier/frp/pkg/msg"
 )
 
 func TestUnmarshalTypedProxyConfig(t *testing.T) {
@@ -46,4 +48,35 @@ func TestUnmarshalTypedProxyConfig(t *testing.T) {
 
 	require.IsType(&TCPProxyConfig{}, proxyConfigs.Proxies[0].ProxyConfigurer)
 	require.IsType(&HTTPProxyConfig{}, proxyConfigs.Proxies[1].ProxyConfigurer)
+}
+
+func TestTTLJSONRoundTrip(t *testing.T) {
+	require := require.New(t)
+	cfg := &TCPProxyConfig{}
+	require.NoError(json.Unmarshal([]byte(`{"type":"tcp","name":"p","remotePort":6000,"ttl":"2h"}`), cfg))
+	require.Equal(int64(2*60*60), cfg.TTL.Seconds())
+
+	b, err := json.Marshal(cfg)
+	require.NoError(err)
+	require.Contains(string(b), `"ttl":"2h0m0s"`)
+}
+
+func TestTTLInvalidDurationRejectedAtUnmarshal(t *testing.T) {
+	require := require.New(t)
+	cfg := &TCPProxyConfig{}
+	err := json.Unmarshal([]byte(`{"type":"tcp","name":"p","remotePort":6000,"ttl":"forever"}`), cfg)
+	require.Error(err)
+}
+
+func TestTTLMarshalToMsg(t *testing.T) {
+	require := require.New(t)
+	cfg := &TCPProxyConfig{}
+	require.NoError(json.Unmarshal([]byte(`{"type":"tcp","name":"p","remotePort":6000,"ttl":"90m"}`), cfg))
+	m := &msg.NewProxy{}
+	cfg.MarshalToMsg(m)
+	require.Equal(int64(5400), m.TTLSeconds)
+
+	got := &TCPProxyConfig{}
+	got.UnmarshalFromMsg(m)
+	require.Equal(int64(5400), got.TTL.Seconds())
 }
