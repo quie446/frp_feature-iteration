@@ -110,6 +110,9 @@ type NewProxy struct {
 	GroupKey           string            `json:"group_key,omitempty"`
 	Metas              map[string]string `json:"metas,omitempty"`
 	Annotations        map[string]string `json:"annotations,omitempty"`
+	// TTLSeconds is the optional time-to-live of the proxy in seconds.
+	// 0 means no limit. The server closes the proxy once the TTL elapses.
+	TTLSeconds int64 `json:"ttl_seconds,omitempty"`
 
 	// tcp and udp only
 	RemotePort int `json:"remote_port,omitempty"`

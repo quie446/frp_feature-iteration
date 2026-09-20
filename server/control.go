@@ -402,6 +402,10 @@ type Control struct {
 	// proxies in one client
 	proxies map[string]proxy.Proxy
 
+	// ttlTimers holds the expiry timers of proxies configured with a TTL,
+	// indexed by proxy name.
+	ttlTimers map[string]*time.Timer
+
 	// pool count
 	poolCount int
 
@@ -456,6 +460,7 @@ func NewControl(ctx context.Context, sessionCtx *SessionContext) (*Control, erro
 		sessionCtx:    sessionCtx,
 		workConnCh:    make(chan *proxy.WorkConn, poolCount+workConnPoolCapacityOffset),
 		proxies:       make(map[string]proxy.Proxy),
+		ttlTimers:     make(map[string]*time.Timer),
 		poolCount:     poolCount,
 		portsUsedNum:  0,
 		runID:         sessionCtx.LoginMsg.RunID,
@@ -665,6 +670,13 @@ func (ctl *Control) loginUserInfo() plugin.UserInfo {
 }
 
 func (ctl *Control) closeProxy(pxy proxy.Proxy) {
+	ctl.mu.Lock()
+	if timer, ok := ctl.ttlTimers[pxy.GetName()]; ok {
+		timer.Stop()
+		delete(ctl.ttlTimers, pxy.GetName())
+	}
+	ctl.mu.Unlock()
+
 	pxy.Close()
 	ctl.sessionCtx.PxyManager.Del(pxy.GetName())
 	ctl.serverMetrics.CloseProxy(pxy.GetName(), pxy.GetConfigurer().GetBaseConfig().Type)
@@ -891,6 +903,19 @@ func (ctl *Control) RegisterProxy(pxyMsg *msg.NewProxy) (remoteAddr string, err 
 	ctl.mu.Lock()
 	ctl.proxies[pxy.GetName()] = pxy
 	ctl.mu.Unlock()
+
+	if expireAt := pxy.GetExpireAt(); !expireAt.IsZero() {
+		ttl := time.Until(expireAt)
+		ctl.xl.Infof("proxy [%s] registered with TTL [%s], will expire at [%s]",
+			pxy.GetName(), ttl.Round(time.Second), expireAt.Format(time.RFC3339))
+		timer := time.AfterFunc(ttl, func() {
+			ctl.xl.Warnf("proxy [%s] TTL expired at [%s], closing it", pxy.GetName(), time.Now().Format(time.RFC3339))
+			_ = ctl.CloseProxy(&msg.CloseProxy{ProxyName: pxy.GetName()})
+		})
+		ctl.mu.Lock()
+		ctl.ttlTimers[pxy.GetName()] = timer
+		ctl.mu.Unlock()
+	}
 	return
 }
 

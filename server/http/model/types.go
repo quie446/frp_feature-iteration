@@ -108,6 +108,13 @@ type ProxyStatsInfo struct {
 	LastStartTime   string `json:"lastStartTime"`
 	LastCloseTime   string `json:"lastCloseTime"`
 	Status          string `json:"status"`
+	// TTLSeconds is the configured time-to-live of the proxy in seconds.
+	// 0 means the proxy never expires.
+	TTLSeconds int64 `json:"ttlSeconds,omitempty"`
+	// ExpireAt is the RFC3339 time when the proxy will be closed by the server.
+	ExpireAt string `json:"expireAt,omitempty"`
+	// TTLRemainingSeconds is the remaining lifetime of the proxy in seconds.
+	TTLRemainingSeconds int64 `json:"ttlRemainingSeconds,omitempty"`
 }
 
 type GetProxyInfoResp struct {
@@ -126,6 +133,13 @@ type GetProxyStatsResp struct {
 	LastStartTime   string `json:"lastStartTime"`
 	LastCloseTime   string `json:"lastCloseTime"`
 	Status          string `json:"status"`
+	// TTLSeconds is the configured time-to-live of the proxy in seconds.
+	// 0 means the proxy never expires.
+	TTLSeconds int64 `json:"ttlSeconds,omitempty"`
+	// ExpireAt is the RFC3339 time when the proxy will be closed by the server.
+	ExpireAt string `json:"expireAt,omitempty"`
+	// TTLRemainingSeconds is the remaining lifetime of the proxy in seconds.
+	TTLRemainingSeconds int64 `json:"ttlRemainingSeconds,omitempty"`
 }
 
 // /api/traffic/:name

@@ -124,6 +124,10 @@ type ProxyBaseConfig struct {
 	Enabled     *bool             `json:"enabled,omitempty"`
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Transport   ProxyTransport    `json:"transport,omitempty"`
+	// TTLSeconds specifies how long this proxy is allowed to live on the server.
+	// nil means no limit (default behavior). If set, it must be positive, and the
+	// server will close the proxy automatically once the TTL elapses.
+	TTLSeconds *int64 `json:"ttlSeconds,omitempty"`
 	// metadata info for each proxy
 	Metadatas    map[string]string  `json:"metadatas,omitempty"`
 	LoadBalancer LoadBalancerConfig `json:"loadBalancer,omitempty"`
@@ -134,6 +138,7 @@ type ProxyBaseConfig struct {
 func (c ProxyBaseConfig) Clone() ProxyBaseConfig {
 	out := c
 	out.Enabled = util.ClonePtr(c.Enabled)
+	out.TTLSeconds = util.ClonePtr(c.TTLSeconds)
 	out.Annotations = maps.Clone(c.Annotations)
 	out.Metadatas = maps.Clone(c.Metadatas)
 	out.HealthCheck = c.HealthCheck.Clone()
@@ -174,6 +179,9 @@ func (c *ProxyBaseConfig) MarshalToMsg(m *msg.NewProxy) {
 	m.GroupKey = c.LoadBalancer.GroupKey
 	m.Metas = c.Metadatas
 	m.Annotations = c.Annotations
+	if c.TTLSeconds != nil {
+		m.TTLSeconds = *c.TTLSeconds
+	}
 }
 
 func (c *ProxyBaseConfig) UnmarshalFromMsg(m *msg.NewProxy) {
@@ -191,6 +199,10 @@ func (c *ProxyBaseConfig) UnmarshalFromMsg(m *msg.NewProxy) {
 	c.LoadBalancer.GroupKey = m.GroupKey
 	c.Metadatas = m.Metas
 	c.Annotations = m.Annotations
+	if m.TTLSeconds > 0 {
+		ttlSeconds := m.TTLSeconds
+		c.TTLSeconds = &ttlSeconds
+	}
 }
 
 type TypedProxyConfig struct {

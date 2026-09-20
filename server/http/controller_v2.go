@@ -538,10 +538,15 @@ func (c *Controller) buildV2ClientStatus(info registry.ClientInfo) model.V2Clien
 func (c *Controller) buildV2ProxyResp(ps *mem.ProxyStats) model.V2ProxyResp {
 	state := "offline"
 	var cfg v1.ProxyConfigurer
+	var expireAt, ttlRemainingSeconds int64
 	if c.pxyManager != nil {
 		if pxy, ok := c.pxyManager.GetByName(ps.Name); ok {
 			state = "online"
 			cfg = pxy.GetConfigurer()
+			if expireAtTime := pxy.GetExpireAt(); !expireAtTime.IsZero() {
+				expireAt = expireAtTime.Unix()
+				ttlRemainingSeconds = max(int64(time.Until(expireAtTime).Seconds()), 0)
+			}
 		}
 	}
 
@@ -551,12 +556,14 @@ func (c *Controller) buildV2ProxyResp(ps *mem.ProxyStats) model.V2ProxyResp {
 		ClientID: ps.ClientID,
 		Spec:     buildV2ProxySpec(ps.Type, cfg),
 		Status: model.V2ProxyStatusResp{
-			State:           state,
-			TodayTrafficIn:  ps.TodayTrafficIn,
-			TodayTrafficOut: ps.TodayTrafficOut,
-			CurConns:        ps.CurConns,
-			LastStartAt:     ps.LastStartAt,
-			LastCloseAt:     ps.LastCloseAt,
+			State:               state,
+			TodayTrafficIn:      ps.TodayTrafficIn,
+			TodayTrafficOut:     ps.TodayTrafficOut,
+			CurConns:            ps.CurConns,
+			LastStartAt:         ps.LastStartAt,
+			LastCloseAt:         ps.LastCloseAt,
+			ExpireAt:            expireAt,
+			TTLRemainingSeconds: ttlRemainingSeconds,
 		},
 	}
 }

@@ -72,6 +72,9 @@ type Proxy interface {
 	Run() (remoteAddr string, err error)
 	GetName() string
 	GetConfigurer() v1.ProxyConfigurer
+	// GetExpireAt returns the time this proxy will be closed by the server
+	// due to its configured TTL. The zero value means the proxy never expires.
+	GetExpireAt() time.Time
 	GetWorkConnFromPool(src, dst net.Addr) (workConn net.Conn, err error)
 	GetUsedPortsNum() int
 	GetResourceController() *controller.ResourceController
@@ -96,6 +99,7 @@ type BaseProxy struct {
 	configurer     v1.ProxyConfigurer
 	wireProtocol   string
 	udpPacketCodec string
+	expireAt       time.Time
 
 	mu  sync.RWMutex
 	xl  *xlog.Logger
@@ -132,6 +136,10 @@ func (pxy *BaseProxy) GetLimiter() *rate.Limiter {
 
 func (pxy *BaseProxy) GetConfigurer() v1.ProxyConfigurer {
 	return pxy.configurer
+}
+
+func (pxy *BaseProxy) GetExpireAt() time.Time {
+	return pxy.expireAt
 }
 
 func (pxy *BaseProxy) Close() {
@@ -539,6 +547,11 @@ func NewProxy(ctx context.Context, options *Options) (pxy Proxy, err error) {
 		limiter = limit.NewBandwidthLimiter(limitBytes)
 	}
 
+	var expireAt time.Time
+	if ttlSeconds := configurer.GetBaseConfig().TTLSeconds; ttlSeconds != nil {
+		expireAt = time.Now().Add(time.Duration(*ttlSeconds) * time.Second)
+	}
+
 	basePxy := BaseProxy{
 		name:           configurer.GetBaseConfig().Name,
 		rc:             options.ResourceController,
@@ -555,6 +568,7 @@ func NewProxy(ctx context.Context, options *Options) (pxy Proxy, err error) {
 		configurer:     configurer,
 		wireProtocol:   options.WireProtocol,
 		udpPacketCodec: options.UDPPacketCodec,
+		expireAt:       expireAt,
 	}
 
 	factory := proxyFactoryRegistry[reflect.TypeOf(configurer)]

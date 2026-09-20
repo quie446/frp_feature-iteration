@@ -22,6 +22,58 @@ import (
 	v1 "github.com/fatedier/frp/pkg/config/v1"
 )
 
+func int64Ptr(v int64) *int64 {
+	return &v
+}
+
+func TestValidateProxyTTLSeconds(t *testing.T) {
+	newTCPProxy := func(ttl *int64) *v1.TCPProxyConfig {
+		return &v1.TCPProxyConfig{
+			ProxyBaseConfig: v1.ProxyBaseConfig{
+				Name:       "test",
+				Type:       "tcp",
+				TTLSeconds: ttl,
+				ProxyBackend: v1.ProxyBackend{
+					LocalIP:   "127.0.0.1",
+					LocalPort: 8080,
+				},
+			},
+			RemotePort: 8080,
+		}
+	}
+
+	tests := []struct {
+		name    string
+		ttl     *int64
+		wantErr bool
+	}{
+		{name: "unset means no TTL", ttl: nil},
+		{name: "positive TTL", ttl: int64Ptr(7200)},
+		{name: "zero TTL rejected", ttl: int64Ptr(0), wantErr: true},
+		{name: "negative TTL rejected", ttl: int64Ptr(-1), wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := newTCPProxy(tt.ttl)
+			cfg.Complete()
+			err := ValidateProxyConfigurerForClient(cfg)
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+
+			err = ValidateProxyConfigurerForServer(cfg, &v1.ServerConfig{})
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestValidateDomainConfigForServerRejectsSubdomainHostCaseInsensitively(t *testing.T) {
 	tests := []struct {
 		name          string

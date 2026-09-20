@@ -163,6 +163,11 @@ type V2ProxyStatusResp struct {
 	CurConns        int64  `json:"curConns"`
 	LastStartAt     int64  `json:"lastStartAt,omitempty"`
 	LastCloseAt     int64  `json:"lastCloseAt,omitempty"`
+	// ExpireAt is the unix timestamp when the proxy will be closed by the
+	// server due to its configured TTL. 0 means the proxy never expires.
+	ExpireAt int64 `json:"expireAt,omitempty"`
+	// TTLRemainingSeconds is the remaining lifetime of the proxy in seconds.
+	TTLRemainingSeconds int64 `json:"ttlRemainingSeconds,omitempty"`
 }
 
 type V2ProxyTrafficResp struct {

@@ -213,6 +213,7 @@ func (c *Controller) APIProxyByName(ctx *httppkg.Context) (any, error) {
 	if pxy, ok := c.pxyManager.GetByName(name); ok {
 		proxyInfo.Conf = getConfFromConfigurer(pxy.GetConfigurer())
 		proxyInfo.Status = "online"
+		proxyInfo.TTLSeconds, proxyInfo.ExpireAt, proxyInfo.TTLRemainingSeconds = proxyTTLInfo(pxy)
 	} else {
 		proxyInfo.Status = "offline"
 	}
@@ -242,6 +243,7 @@ func (c *Controller) getProxyStatsByType(proxyType string) (proxyInfos []*model.
 		if pxy, ok := c.pxyManager.GetByName(ps.Name); ok {
 			proxyInfo.Conf = getConfFromConfigurer(pxy.GetConfigurer())
 			proxyInfo.Status = "online"
+			proxyInfo.TTLSeconds, proxyInfo.ExpireAt, proxyInfo.TTLRemainingSeconds = proxyTTLInfo(pxy)
 		} else {
 			proxyInfo.Status = "offline"
 		}
@@ -268,6 +270,7 @@ func (c *Controller) getProxyStatsByTypeAndName(proxyType string, proxyName stri
 		if pxy, ok := c.pxyManager.GetByName(proxyName); ok {
 			proxyInfo.Conf = getConfFromConfigurer(pxy.GetConfigurer())
 			proxyInfo.Status = "online"
+			proxyInfo.TTLSeconds, proxyInfo.ExpireAt, proxyInfo.TTLRemainingSeconds = proxyTTLInfo(pxy)
 		} else {
 			proxyInfo.Status = "offline"
 		}
@@ -280,6 +283,21 @@ func (c *Controller) getProxyStatsByTypeAndName(proxyType string, proxyName stri
 	}
 
 	return
+}
+
+// proxyTTLInfo returns the configured TTL in seconds, the formatted expiry
+// time and the remaining lifetime in seconds for a proxy. Zero values are
+// returned if the proxy has no TTL configured.
+func proxyTTLInfo(pxy proxy.Proxy) (ttlSeconds int64, expireAt string, remainingSeconds int64) {
+	expireAtTime := pxy.GetExpireAt()
+	if expireAtTime.IsZero() {
+		return 0, "", 0
+	}
+	if ttl := pxy.GetConfigurer().GetBaseConfig().TTLSeconds; ttl != nil {
+		ttlSeconds = *ttl
+	}
+	remainingSeconds = max(int64(time.Until(expireAtTime).Seconds()), 0)
+	return ttlSeconds, expireAtTime.Format(time.RFC3339), remainingSeconds
 }
 
 func buildClientInfoResp(info registry.ClientInfo) model.ClientInfoResp {

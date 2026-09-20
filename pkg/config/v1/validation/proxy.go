@@ -33,6 +33,9 @@ func validateProxyBaseConfigForClient(c *v1.ProxyBaseConfig) error {
 	if err := ValidateAnnotations(c.Annotations); err != nil {
 		return err
 	}
+	if c.TTLSeconds != nil && *c.TTLSeconds <= 0 {
+		return fmt.Errorf("ttlSeconds should be a positive integer, got %d", *c.TTLSeconds)
+	}
 	if !slices.Contains([]string{"", "v1", "v2"}, c.Transport.ProxyProtocolVersion) {
 		return fmt.Errorf("not support proxy protocol version: %s", c.Transport.ProxyProtocolVersion)
 	}
@@ -67,6 +70,9 @@ func validateProxyBaseConfigForClient(c *v1.ProxyBaseConfig) error {
 func validateProxyBaseConfigForServer(c *v1.ProxyBaseConfig) error {
 	if err := ValidateAnnotations(c.Annotations); err != nil {
 		return err
+	}
+	if c.TTLSeconds != nil && *c.TTLSeconds <= 0 {
+		return fmt.Errorf("ttlSeconds should be a positive integer, got %d", *c.TTLSeconds)
 	}
 	return nil
 }

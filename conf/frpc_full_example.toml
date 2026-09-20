@@ -195,6 +195,12 @@ transport.bandwidthLimitMode = "client"
 transport.useEncryption = false
 # If true, traffic will be compressed
 transport.useCompression = false
+# Optional time-to-live of this proxy in seconds. If set, frps will close
+# this proxy automatically once the TTL elapses, and an expiry event is
+# logged on the server. The remaining lifetime is exposed via the frps
+# admin API (ttlSeconds/expireAt/ttlRemainingSeconds fields). Must be a
+# positive integer; omit it for proxies that should never expire.
+# ttlSeconds = 7200
 # Remote port listen by frps
 remotePort = 6001
 # frps will load balancing connections for proxies in same group
